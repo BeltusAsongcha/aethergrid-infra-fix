@@ -1,0 +1,59 @@
+﻿name: AetherGrid Gated Deployment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check workflow and repository safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Checking repository for sensitive files"
+          if git ls-files | grep -Ei '(^|/)(\.env|aws-creds\.env|id_rsa|id_ed25519)$'; then
+            echo "Sensitive filename detected"
+            exit 1
+          fi
+          echo "Repository safety check passed"
+
+      - name: Validate Helm chart when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f charts/aethergrid/Chart.yaml ]; then
+            helm lint charts/aethergrid
+            helm template aethergrid charts/aethergrid \
+              --namespace aethergrid-local > /dev/null
+          else
+            echo "Helm chart not supplied yet; validation pending"
+          fi
+
+  deploy:
+    name: Production Approval Gate
+    needs: [test]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Confirm approval gate
+        shell: bash
+        run: |
+          echo "Production environment gate passed."
+          echo "No production deployment is configured."
+          echo "Deployment remains blocked pending GDPR verification."
+          echo "AWS credentials must never be hardcoded."
+          echo "Use GitHub secrets and AWS OIDC for future integration."
